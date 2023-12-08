@@ -48,7 +48,7 @@ def calculate_patch_score(img, size=16, step=16):
     Returns:
         torch.Tensor: Patch scores calculated from the input image.
     """
-    img = transforms.ToTensor()(img.resize((224, 224)))
+    img = transforms.ToTensor()(img.resize((256, 256)))
     patch_img = img.unfold(1, size, step).unfold(2, size, step).unfold(3, size, step)
     patch_img_reshape = patch_img.squeeze(0).squeeze(2)
     img_score = patch_img_reshape.mean(dim=(2, 3)).flatten()

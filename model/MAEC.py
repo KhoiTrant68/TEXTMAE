@@ -33,7 +33,7 @@ class MAEC(CompressionModel):
 
     def __init__(
         self,
-        img_size=224,
+        img_size=256,
         patch_size=16,
         in_chans=3,
         encoder_embed_dim=768,
@@ -859,7 +859,7 @@ class MAEC(CompressionModel):
 
         """For training, comment out the code below"""
         noise = torch.rand(
-            ids_keep.shape[0], 196, device=x_decode.device
+            ids_keep.shape[0], 256, device=x_decode.device
         )  # noise in [0, 1]
         ids_all = torch.argsort(noise, dim=1)
         superset = torch.cat([ids_keep, ids_all], dim=1)

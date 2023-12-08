@@ -74,21 +74,21 @@ def get_image_dataset(mode: str, args) -> Dataset:
 
     if mode == "train":
         t = list()
-        t.append(transforms.Resize((224, 224), interpolation=Image.BICUBIC))
+        t.append(transforms.Resize((256, 256), interpolation=Image.BICUBIC))
         t.append(transforms.ToTensor())
         t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
         transform = transforms.Compose(t)
     elif mode == "val":
         t = list()
         t.append(
-            transforms.Resize((224, 224), interpolation=Image.BICUBIC)
+            transforms.Resize((256, 256), interpolation=Image.BICUBIC)
         )  # to maintain same ratio w.r.t 224 images
         t.append(transforms.ToTensor())
         t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
         transform = transforms.Compose(t)
     else:
         t = list()
-        t.append(transforms.Resize((224, 224), interpolation=Image.BICUBIC))
+        t.append(transforms.Resize((256, 256), interpolation=Image.BICUBIC))
         t.append(transforms.ToTensor())
         transform = transforms.Compose(t)
 
