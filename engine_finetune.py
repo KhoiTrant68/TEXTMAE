@@ -251,14 +251,14 @@ def val_one_epoch(
             with torch.cuda.amp.autocast():
                 out_net = model(samples, total_scores)
                 # Compute output
-                loss = criterion(out_net, samples)
+                out_criterion = criterion(out_net, samples)
 
                 aux_loss.update(model.module.aux_loss())
-                bpp_loss.update(loss["bpp_loss"])
-                loss.update(loss["loss"])
-                ssim_loss.update(loss["ssim_loss"])
-                vgg_loss.update(loss["vgg_loss"])
-                L1_loss.update(loss["L1_loss"])
+                bpp_loss.update(out_criterion["bpp_loss"])
+                loss.update(out_criterion["loss"])
+                ssim_loss.update(out_criterion["ssim_loss"])
+                vgg_loss.update(out_criterion["vgg_loss"])
+                L1_loss.update(out_criterion["L1_loss"])
 
             metric_logger.update(loss=loss.avg)
             metric_logger.update(L1_loss=L1_loss.avg)

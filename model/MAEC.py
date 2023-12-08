@@ -17,7 +17,7 @@ from compressai.models import CompressionModel
 from compressai.ops import quantize_ste
 
 from common.pos_embed import get_2d_sincos_pos_embed
-from loss.vgg import cal_features_loss
+from loss.vgg import normalize_batch, de_normalize, feature_network
 
 from timm.models.vision_transformer import PatchEmbed, Block
 
@@ -662,7 +662,9 @@ class MAEC(CompressionModel):
             int(self.encoder_embed.num_patches**0.5),
             cls_token=True,
         )
-        self.encoder_pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+        self.encoder_pos_embed.data.copy_(
+            torch.from_numpy(pos_embed).float().unsqueeze(0)
+        )
 
         decoder_pos_embed = get_2d_sincos_pos_embed(
             self.decoder_pos_embed.shape[-1],
@@ -683,7 +685,7 @@ class MAEC(CompressionModel):
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
-         
+
     @staticmethod
     def _init_weights(m):
         if isinstance(m, nn.Linear):
@@ -721,7 +723,7 @@ class MAEC(CompressionModel):
         # Reshape the patches into the final format
         patched_feature = x.reshape(imgs.shape[0], h * w, patch_size**2 * 3)
         return patched_feature
-    
+
     def unpatchify(self, patched_feature):
         """
         Unpatchify function to convert from a patched feature to an image (N, 3, H, W).
@@ -746,7 +748,7 @@ class MAEC(CompressionModel):
         x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(x.shape[0], 3, h * patch_size, w * patch_size)
         return imgs
-    
+
     def random_masking(self, x, total_scores):
         """
         Perform per-sample random masking by per-sample shuffling.
@@ -778,14 +780,16 @@ class MAEC(CompressionModel):
         len_keep = int(self.num_keep_patches)
 
         # Sort noise for each sample
-        ids_shuffle = torch.multinomial(total_scores, num_samples=L, replacement=False).to(device)
+        ids_shuffle = torch.multinomial(
+            total_scores, num_samples=L, replacement=False
+        ).to(device)
 
         # Keep the first subset
         ids_keep = ids_shuffle[:, :len_keep].to(device)
         x_keep = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
 
         return x_keep, ids_keep
-    
+
     def forward_encoder(self, imgs, total_scores):
         """
         Encoder module of the MCM model.
@@ -798,7 +802,7 @@ class MAEC(CompressionModel):
 
             total_scores (torch.Tensor): Probability map with shape (N, L), where
                 - N: Number of batches
-                - L: Full patches  
+                - L: Full patches
 
         Returns:
             x_keep (torch.Tensor): Remaining patched image with shape (N, L, D), where
@@ -832,7 +836,7 @@ class MAEC(CompressionModel):
         x_keep = x_keep[:, 1:, :]
 
         return x_keep, ids_keep
-    
+
     def forward_decoder(self, x_decode, ids_keep):
         """
         Decoder module of the MCM model.
@@ -853,28 +857,36 @@ class MAEC(CompressionModel):
         x_decode = self.decoder_embed(x_decode)
         ids_keep = ids_keep.to(x_decode.device)
 
-        '''For training, comment out the code below'''
-        noise = torch.rand(ids_keep.shape[0], 196, device=x_decode.device)  # noise in [0, 1]
+        """For training, comment out the code below"""
+        noise = torch.rand(
+            ids_keep.shape[0], 196, device=x_decode.device
+        )  # noise in [0, 1]
         ids_all = torch.argsort(noise, dim=1)
         superset = torch.cat([ids_keep, ids_all], dim=1)
         uniset, count = torch.unique(superset[0], sorted=False, return_counts=True)
-        mask = (count == 1)
+        mask = count == 1
         ids_remove = uniset.masked_select(mask).unsqueeze(0)
         for i in range(1, ids_keep.shape[0]):
             uniset, count = torch.unique(superset[i], sorted=False, return_counts=True)
-            mask = (count == 1)
-            ids_remove = torch.cat([ids_remove, uniset.masked_select(mask).unsqueeze(0)], dim=0)
+            mask = count == 1
+            ids_remove = torch.cat(
+                [ids_remove, uniset.masked_select(mask).unsqueeze(0)], dim=0
+            )
 
         ids_restore = torch.cat([ids_keep, ids_remove], dim=1)
-        '''For training, comment out the code above'''
+        """For training, comment out the code above"""
 
         ids_restore = torch.argsort(ids_restore, dim=1)
 
         # append mask tokens to sequence
-        mask_tokens = self.mask_token.repeat(x_decode.shape[0], ids_restore.shape[1] - x_decode.shape[1], 1)
+        mask_tokens = self.mask_token.repeat(
+            x_decode.shape[0], ids_restore.shape[1] - x_decode.shape[1], 1
+        )
 
         x_ = torch.cat([x_decode, mask_tokens], dim=1)
-        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_decode.shape[2]))  # unshuffle
+        x_ = torch.gather(
+            x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_decode.shape[2])
+        )  # unshuffle
         x_decode = x_
 
         # add pos embed
@@ -889,7 +901,37 @@ class MAEC(CompressionModel):
         x_decode = self.decoder_pred(x_decode)
 
         return x_decode
-    
+
+    def cal_features_loss(preds, imgs):
+        """
+        Calculates the features loss using VGG16
+
+        Args:
+            preds (torch.Tensor): Batch-like predictions (N, H, W, 3)
+            imgs (torch.Tensor): Batch-like images (N, H, W, 3)
+
+        Returns:
+            feature_loss (torch.Tensor): Batch-like loss
+        """
+
+        # Define featuremap network VGG16
+        vgg_model = feature_network(net_type="vgg16", requires_grad=False)
+
+        # Denormalize the batch-like images
+        pred_F2_denorm = de_normalize(preds)
+        gt_F2_denorm = de_normalize(imgs)
+
+        # Normalize the batch-like images
+        pred_F2_norm = normalize_batch(pred_F2_denorm)
+        gt_F2_norm = normalize_batch(gt_F2_denorm)
+
+        # Featuremap after passing into VGG16
+        feature_pred_F2 = vgg_model(pred_F2_norm)
+        feature_gt_F2 = vgg_model(gt_F2_norm)
+        feature_loss = nn.MSELoss()(
+            feature_pred_F2.relu2_2, feature_gt_F2.relu2_2
+        ) + nn.MSELoss()(feature_pred_F2.relu3_3, feature_gt_F2.relu3_3)
+        return feature_loss
 
     def forward_loss(self, imgs, preds):
         """
@@ -912,9 +954,9 @@ class MAEC(CompressionModel):
         ssim_loss = 1 - ssim(preds, imgs)
 
         l1_loss = nn.L1Loss()(preds, imgs)
-        feature_loss = cal_features_loss(preds, imgs)
+        feature_loss = self.cal_features_loss(preds, imgs)
         return ssim_loss, l1_loss, feature_loss
-    
+
     def forward(self, imgs, total_scores):
         """
         MAEC model
@@ -1113,7 +1155,7 @@ class MAEC(CompressionModel):
             "shape": z.size()[-2:],
             "ids_keep": ids_keep,
         }
-    
+
     def decompress(self, strings, shape, ids_restore=None):
         assert isinstance(strings, list) and len(strings) == 2
 
@@ -1188,7 +1230,7 @@ class MAEC(CompressionModel):
         x_hat = self.unpatchify(x_hat)
 
         return {"x_hat": x_hat}
-    
+
 
 def MAEC_base_patch16_512(**kwargs):
     model = MAEC(

@@ -83,33 +83,3 @@ def feature_network(net_type="vgg16", requires_grad=False):
     return feature_network
 
 
-def cal_features_loss(preds, imgs):
-    """
-    Calculates the features loss using VGG16
-
-    Args:
-        preds (torch.Tensor): Batch-like predictions (N, H, W, 3)
-        imgs (torch.Tensor): Batch-like images (N, H, W, 3)
-
-    Returns:
-        feature_loss (torch.Tensor): Batch-like loss
-    """
-
-    # Define featuremap network VGG16
-    vgg_model = feature_network(net_type="vgg16", requires_grad=False)
-
-    # Denormalize the batch-like images
-    pred_F2_denorm = de_normalize(preds)
-    gt_F2_denorm = de_normalize(imgs)
-
-    # Normalize the batch-like images
-    pred_F2_norm = normalize_batch(pred_F2_denorm)
-    gt_F2_norm = normalize_batch(gt_F2_denorm)
-
-    # Featuremap after passing into VGG16
-    feature_pred_F2 = vgg_model(pred_F2_norm)
-    feature_gt_F2 = vgg_model(gt_F2_norm)
-    feature_loss = nn.MSELoss()(
-        feature_pred_F2.relu2_2, feature_gt_F2.relu2_2
-    ) + nn.MSELoss()(feature_pred_F2.relu3_3, feature_gt_F2.relu3_3)
-    return feature_loss
