@@ -110,7 +110,7 @@ def main(args):
 
     # Load Mae Encoder model
     if args.finetune and not args.eval:
-        checkpoint = torch.load(args.fintune, map_location="cpu")
+        checkpoint = torch.load(args.finetune, map_location="cpu")
 
         print("Load pre-trained checkpoint from: %s" % args.finetune)
         checkpoint_model = checkpoint["model"]
