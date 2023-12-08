@@ -902,7 +902,7 @@ class MAEC(CompressionModel):
 
         return x_decode
 
-    def cal_features_loss(preds, imgs):
+    def cal_features_loss(self, preds, imgs):
         """
         Calculates the features loss using VGG16
 
