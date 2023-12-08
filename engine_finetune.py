@@ -97,7 +97,9 @@ def train_one_epoch(
         # Compute the loss values for each iteration.
         loss["loss"] /= accum_iter
 
-        aux_loss = model.module.aux_loss()
+        # aux_loss = model.module.aux_loss()
+        aux_loss = model.aux_loss()
+
         aux_loss /= accum_iter
 
         # loss_scaler(
@@ -253,7 +255,9 @@ def val_one_epoch(
                 # Compute output
                 out_criterion = criterion(out_net, samples)
 
-                aux_loss.update(model.module.aux_loss())
+                # aux_loss.update(model.module.aux_loss())
+                aux_loss.update(model.aux_loss())
+
                 bpp_loss.update(out_criterion["bpp_loss"])
                 loss.update(out_criterion["loss"])
                 ssim_loss.update(out_criterion["ssim_loss"])
