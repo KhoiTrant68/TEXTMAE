@@ -126,7 +126,6 @@ def main(args):
                 
         # Interpolate position embedding
         interpolate_pos_embed(model, checkpoint_model)
-        msg = model.load_state_dict(checkpoint_model)
 
     # Change device
     model.to(device)
