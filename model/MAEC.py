@@ -1234,7 +1234,7 @@ class MAEC(CompressionModel):
 
 def MAEC_base_patch16_512(**kwargs):
     model = MAEC(
-        img_size=224,
+        img_size=256,
         patch_size=16,
         in_chans=3,
         encoder_embed_dim=768,
